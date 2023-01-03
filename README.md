@@ -1,2 +1,3 @@
-# Machine-Learning_R
- Machine Learning Supervisionado usando linguagem R
+## Machine Learning com R ##
+
+Machine Learning Supervisionado usando linguagem R
