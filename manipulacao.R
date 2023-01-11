@@ -7,9 +7,21 @@ library(tidyverse)
 # Gráficos
 library(ggplot2)
 
-# Algoritmos
+###### Algoritmos ###########
+
+
+#install.packages("e1071")
+library(e1071)
+
+# Baseado em instância
+
 #install.packages("class")
 library(class)
+
+# Métodos baseado em arvore de decisão
+
+#install.packages("rpart", dependencies=T)
+library(rpart)
 #install.packages("randomForest")
 library(randomForest)
 #install.packages("caret")
@@ -791,6 +803,7 @@ descritiva("CLASSI_FIN")
 
 str(dataset)
 
+################################################################
 # Construindo o modelo ------------------------------------------
 
 # Amostra de probabilidade
@@ -798,8 +811,9 @@ str(dataset)
 amostra <- sample(1:2, 
                   size=nrow(dataset), # O tamanho da amostragem é 366229
                   replace=TRUE, # Amostragem com reposição (de c(1,2))
-                  prob=c(0.7,0.3)) # A probabilidade de ser 0 é 70%, de ser 1 é 30%
+                  prob=c(0.7,0.3)) # A probabilidade de ser 1 é 70%, e de ser 2 é 30%
 amostra %>% length()
+
 
 
 # Dividir amostras de treino e teste #
@@ -807,32 +821,170 @@ amostra %>% length()
 # Amostra de treino: n==1 (os 70%)
 dataset_treino <- dataset[amostra==1,]
 # Amostra de teste: n==2 (os 30%)
-dataset_test <- dataset[amostra==2,]
+dataset_teste <- dataset[amostra==2,]
 
 amostra %>% table()
 
-# Modelo de classificação
+###### Arvore de Decisão ##################################
 
-#arvore <- rpart(EVOLUCAO ~ .,data=dataset_treino, method = "class" )
-#print(arvore)
 
-floresta <- randomForest(CLASSI_FIN ~ ., data=dataset_treino, ntree=100, importance = T )
-floresta
-plot(floresta)
+# Criando modelo 
 
-#previsao
+modelo_arvore <- rpart(EVOLUCAO ~ NU_IDADE_N + DESC_RESP + SATURACAO + HOSPITAL + VACINA_COV + TOSSE + DISPNEIA + CARDIOPATI + CS_SEXO + FEBRE, data=dataset_treino, method = "class" )
+print(modelo_arvore)
 
-#teste <- predict(arvore, newdata = dataset_test) # probabilidades 
-#head(teste)
+# Impressão da arvore
 
-previsao <- predict(floresta, dataset_test)
-previsao
-#confusao <- table(previsao, dataset_test$CLASSI_FIN)
-#view(confusao)
+plot(modelo_arvore)
+text(modelo_arvore, use.n = TRUE, all = TRUE, cex=.8)
+
+# Previsão
+
+predicao_arvore = predict(modelo_arvore, newdata = dataset_teste)
+head(predicao_arvore)
+
+
+# Adicionando Coluna
+
+agrupar <- cbind(dataset_teste, predicao_arvore)
+
+table(agrupar$obito_outras_causas)
+table(agrupar$obito)
+table(agrupar$cura)
+
+# Criando coluna com resultado categórico
+
+agrupar['Result'] <- case_when(agrupar$cura >= 0.5 ~ "cura",
+                               agrupar$obito >= 0.5 ~ "obito",
+                               agrupar$obito_outras_causas >= 0.5 ~ "obito_outras_causas")
+
+table(agrupar$Result)
+
+
+#Obs.: N dataset oficial na variável 'evolução' teve obito_outras_causas porém o algoritmo não acertou.
+
+                        
+# Matriz de confusão
+
+confusao_arvore <- table(agrupar$EVOLUCAO, agrupar$Result)
+taxaacerto_arvore <- (arvore_confusao[1] + arvore_confusao[4]) / sum(arvore_confusao)
+taxaacerto_arvore
+
+###### Naive Bayes ########################################
+
+# Criando modelo
+
+dim(dataset_treino)
+dim(dataset_teste)
+
+modelo_naiveBayes <- naiveBayes(EVOLUCAO ~ NU_IDADE_N + DESC_RESP + SATURACAO + 
+                                  HOSPITAL + VACINA_COV + TOSSE + 
+                                  DISPNEIA + CARDIOPATI + CS_SEXO + FEBRE, dataset_treino )
+modelo_naiveBayes
+
+# Previsão
+
+predicao_naiveBayes <- predict(modelo_naiveBayes, dataset_teste)
+predicao_naiveBayes
+
+
+# Matriz de Confusão
+
+confusao_naiveBayes <- table(dataset_teste$EVOLUCAO, predicao_naiveBayes)
+confusao_naiveBayes
+taxaacerto_naiveBayes <- (confusao_naiveBayes[1] + 
+                            confusao_naiveBayes[5] + 
+                            confusao_naiveBayes[9]) / 
+                            sum(confusao_naiveBayes)
+
+taxaacerto_naiveBayes
+
+###### SVM #########################################
+                      
+# Seleção de Atributos
+
+# Modelo com todos so atributos 
+
+modelo_svm <- svm(EVOLUCAO ~ ., dataset_treino)
+
+# Previsão
+
+predicao_svm <- predict(modelo_svm, dataset_teste)
+
+# Matriz de Confusão
+
+confusao_svm <- table(dataset_teste$EVOLUCAO, predicao_svm)
+
+# Taxa de Acerto
+
+taxaacerto_svm <- (confusao_svm[1] +
+                     confusao_svm[5] +
+                     confusao_svm[9]) /
+                      sum(confusao_svm)
+taxaacerto_svm
+
+# Aplicando método de selação de atributos
+importancia <- randomForest(EVOLUCAO ~ ., data = dataset_treino)
+col = importance(importancia)
+col
+varImpPlot(importancia)
+
+# Segundo modelo com as variáveis mais importantes
+modelo_svm_2 <- svm(EVOLUCAO ~ NU_IDADE_N + 
+                    DESC_RESP + SATURACAO, dataset_treino)
+
+predicao_svm_2 <- predict(modelo_svm, dataset_teste)
+confusao_svm_2 <- table(dataset_teste$EVOLUCAO, predicao_svm)
+
+
+taxaacerto_svm <- (confusao_svm[1] + confusao_svm[5] +
+                     confusao_svm[9]) / sum(confusao_svm)
+
+taxaacerto_svm
+
+# Obs.: svm tem uma grande penalidade de custo computacional
+###### KNN ##########################################
+
+# 
+
+predicao_knn <- knn(dataset_treino[,1:23], dataset_teste[,1:23], dataset_treino[,23], k=3) # número de k vizinhos mais próximos
 
 # Matriz de confusão
 
-confusao_2 <- confusionMatrix(previsao, dataset_test$CLASSI_FIN)
+confusao_knn <- table(dataset_treino[,5], predicao_knn)
+confusao_knn
+
+# Taxa de acerto
+
+taxadeacerto_knn <- (confusao_knn[1] + confusao_knn[5] + confusao_knn[9]) / sum(confusao_knn)
+
+
+
+##### Ensamble Learning ###########################################
+
+# Random Forest
+
+# Criando modelo
+modelo_floresta <- randomForest(EVOLUCAO ~ ., data = dataset_treino, ntree=100, importance = T )
+modelo_floresta
+
+plot(modelo_floresta)
+
+# Previsão
+
+predicao_floresta <- predict(modelo_floresta, newdata = dataset_teste) # probabilidades 
+head(predicao_floresta)
+
+# Matriz de Confusão
+
+confusao_floresta <- table(dataset_teste$EVOLUCAO, predicao_floresta)
+view(confusao_floresta)
+
+## Avaliação de Performance
+
+# Matriz de confusão
+
+confusao_2 <- confusionMatrix(dataset_teste$EVOLUCAO, predicao_floresta)
 
 plot(confusao_2)
 
