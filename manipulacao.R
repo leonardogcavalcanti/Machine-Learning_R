@@ -1,6 +1,6 @@
 # Pacotes -------------------------------------------------- 
 
-# Manipulação
+# Manipulação de dados
 #install.packages("tidyverse")
 library(tidyverse)
 
@@ -9,9 +9,15 @@ library(ggplot2)
 
 ###### Algoritmos ###########
 
+#install.packages("themis", dependencies = TRUE)
+library(themis)
 
-#install.packages("e1071")
-library(e1071)
+# Manipulação de machine learning
+#install.packages("caret")
+library(caret)
+
+###### Modelos ###########
+
 
 # Baseado em instância
 
@@ -24,8 +30,7 @@ library(class)
 library(rpart)
 #install.packages("randomForest")
 library(randomForest)
-#install.packages("caret")
-library(caret)
+
 
 # Wrangling -----------------------------------------------
 
@@ -237,14 +242,23 @@ bp
 unique(dataset$CS_SEXO)
 summary(dataset$CS_SEXO)
 # Colocando sexo Ignorado para a maior quantidade de pessoas(MODA)
-dataset <- dataset %>%  
-  mutate(CS_SEXO = replace(CS_SEXO, 
-                           CS_SEXO=="I", "M"))
-
-# Revendo o summary
-summary(dataset$CS_SEXO)
+dataset <- mutate(dataset,
+                  CS_SEXO = replace(CS_SEXO, CS_SEXO == "I", "M"))
+                  
 # Tirando o valor "I" da variável 
 dataset$CS_SEXO <- factor(dataset$CS_SEXO)
+
+# Transformando um texto em valores, onde:
+# Feminino = 0 e Masculino = 1
+dataset <- mutate(dataset,
+                  CS_SEXO = recode(CS_SEXO,
+                                   "F" = 0,
+                                   "M" = 1))
+                
+str(dataset)
+
+# Revendo a variável
+unique(dataset$CS_SEXO)
 # Fazendo table para novo barplot 
 counts_sexo_2 <- table(dataset$CS_SEXO)
 barplot(counts_sexo_2,
@@ -265,13 +279,25 @@ table(dataset$NU_IDADE_N)
 # Transformando a variável 'idade' em categorias
 dataset$NU_IDADE_N <- cut(dataset$NU_IDADE_N,
                           breaks = c(0, 12, 29, 59, Inf),
-                          labels = c("infantil", "jovem", "adulto", "idoso"),
+                          labels = c("INFANTIL", "JOVEM", "ADULTO", "IDOSO"),
                           include.lowest = TRUE)
 
-# Conferindo 
-summary(dataset$NU_IDADE_N)
+# Criando One Hot Encoder 
+dataset <- mutate(dataset, INFANTIL = ifelse(NU_IDADE_N == "INFANTIL",1,0))
+dataset <- mutate(dataset, JOVEM = ifelse(NU_IDADE_N == "JOVEM",1,0))
+dataset <- mutate(dataset, ADULTO = ifelse(NU_IDADE_N == "ADULTO",1,0))
+dataset <- mutate(dataset, IDOSO = ifelse(NU_IDADE_N == "IDOSO", 1,0))
+
 str(dataset)
-barplot(table(dataset$NU_IDADE_N))
+
+# Apagando variável anterior
+dataset <- select(dataset, everything(), -NU_IDADE_N)  
+
+# Realocando as variáveis
+dataset <- dataset %>% 
+  relocate(INFANTIL, JOVEM, ADULTO, IDOSO, .after = CS_SEXO)
+
+view(dataset)
 
 # FEBRE
 counts_febre
@@ -684,20 +710,37 @@ counts_hosp_3
 # CLASSI_FIN
 counts_classfinal
 barplot(counts_classfinal)
-# Renomenado e passando para factor
-dataset <- dataset %>% 
-           mutate(CLASSI_FIN = 
-                  recode(CLASSI_FIN,
-                        "1" = "SRAG_influenza",
-                        "2" = "SRAG_outros_virus",
-                        "3" = "SRAG_outros_agente_etiologico",
-                        "4" = "SRAG_nao_especificado",
-                        "5" = "SRAG_covid_19"))
-
-# Passando para Factor
-dataset$CLASSI_FIN <- as.factor(dataset$CLASSI_FIN)
 str(dataset)
+view(dataset)
+
+# Criando One Hot Encoder 
+dataset <- mutate(dataset, INFLUENZA = ifelse(CLASSI_FIN == 1, 1,0))
+dataset <- mutate(dataset, OUTROS_VIRUS = ifelse(CLASSI_FIN == 2, 1,0))
+dataset <- mutate(dataset, OUTROS_AGENTES = ifelse(CLASSI_FIN == 3 ,1,0))
+dataset <- mutate(dataset, NAO_ESPECIFICADO = ifelse(CLASSI_FIN == 4 , 1,0))
+dataset <- mutate(dataset, COVID_19 = ifelse(CLASSI_FIN == 5 , 1,0))
+
+# Apagando variável anterior
+dataset <- select(dataset, everything(), -CLASSI_FIN)  
+
+# Realocando as variáveis
+dataset <- dataset %>% 
+  relocate(INFLUENZA, OUTROS_VIRUS, OUTROS_AGENTES, NAO_ESPECIFICADO, COVID_19, .before = EVOLUCAO)
+# Renomenado e passando para factor
+#dataset <- dataset %>% 
+           #mutate(CLASSI_FIN = 
+                  #recode(CLASSI_FIN,
+                      # "1" = "SRAG_influenza",
+                      # "2" = "SRAG_outros_virus",
+                      # "3" = "SRAG_outros_agente_etiologico",
+                      # "4" = "SRAG_nao_especificado",
+                      # "5" = "SRAG_covid_19"))
+view(dataset)
+# Passando para Factor
+#dataset$CLASSI_FIN <- as.factor(dataset$CLASSI_FIN)
+#str(dataset)
 # fazendo table para novo barplot
+dataset$CLASSI_FIN <- as.numeric(dataset$CLASSI_FIN)
 counts_classfinal_2 <- table(dataset$CLASSI_FIN)
 barplot(counts_classfinal_2)
 counts_classfinal_2
@@ -737,8 +780,8 @@ counts_evolucao_2
 view(dataset)
 
 ####################################################################
-# Vamos fazer uma breve descritiva gráfica -------------------------
-# Vamos criar uma base temporária para manter a base original intacta.
+# Descritiva gráfica -------------------------
+# Criando base temporária para manter a base original intacta.
 
 tmp <- dataset
 tmp$EVOLUCAO <- as.integer(dataset$EVOLUCAO=="cura")  # 1 = SIM (cura)
@@ -803,146 +846,125 @@ descritiva("CLASSI_FIN")
 
 str(dataset)
 
+table(dataset$CLASSI_FIN)
+table(dataset$EVOLUCAO)
+
+# Dados preditivos desbalanceados
+plot(dataset$EVOLUCAO)
+
+# Balanceando os dados preditivos usando step_upsample 
+# Referência: https://themis.tidymodels.org/ 
+# Registros duplicados até ajustarem no tamanho
+data_balance <- recipe(EVOLUCAO ~., data = dataset) %>% 
+  themis::step_downsample(EVOLUCAO) %>% 
+  prep() %>% juice()
+
+
+# dados preditivos balanceados 
+plot(data_balance$EVOLUCAO)
+
+# Os dados aumentaram
+dim(data_balance)
+
 ################################################################
 # Construindo o modelo ------------------------------------------
 
-# Amostra de probabilidade
+inTraining <- createDataPartition(data_balance$EVOLUCAO, p = .70, list = FALSE)
+training <- data_balance[ inTraining,]
+testing  <- data_balance[-inTraining,]
 
-amostra <- sample(1:2, 
-                  size=nrow(dataset), # O tamanho da amostragem é 366229
-                  replace=TRUE, # Amostragem com reposição (de c(1,2))
-                  prob=c(0.7,0.3)) # A probabilidade de ser 1 é 70%, e de ser 2 é 30%
-amostra %>% length()
+view(data_balance)
+###### Naive Bayes ##################################
 
-
-
-# Dividir amostras de treino e teste #
-
-# Amostra de treino: n==1 (os 70%)
-dataset_treino <- dataset[amostra==1,]
-# Amostra de teste: n==2 (os 30%)
-dataset_teste <- dataset[amostra==2,]
-
-amostra %>% table()
-
-###### Arvore de Decisão ##################################
-
-
-# Criando modelo 
-
-modelo_arvore <- rpart(EVOLUCAO ~ NU_IDADE_N + DESC_RESP + SATURACAO + HOSPITAL + VACINA_COV + TOSSE + DISPNEIA + CARDIOPATI + CS_SEXO + FEBRE, data=dataset_treino, method = "class" )
-print(modelo_arvore)
-
-# Impressão da arvore
-
-plot(modelo_arvore)
-text(modelo_arvore, use.n = TRUE, all = TRUE, cex=.8)
-
-# Previsão
-
-predicao_arvore = predict(modelo_arvore, newdata = dataset_teste)
-head(predicao_arvore)
-
-
-# Adicionando Coluna
-
-agrupar <- cbind(dataset_teste, predicao_arvore)
-
-table(agrupar$obito_outras_causas)
-table(agrupar$obito)
-table(agrupar$cura)
-
-# Criando coluna com resultado categórico
-
-agrupar['Result'] <- case_when(agrupar$cura >= 0.5 ~ "cura",
-                               agrupar$obito >= 0.5 ~ "obito",
-                               agrupar$obito_outras_causas >= 0.5 ~ "obito_outras_causas")
-
-table(agrupar$Result)
-
-
-#Obs.: N dataset oficial na variável 'evolução' teve obito_outras_causas porém o algoritmo não acertou.
-
-                        
-# Matriz de confusão
-
-confusao_arvore <- table(agrupar$EVOLUCAO, agrupar$Result)
-taxaacerto_arvore <- (arvore_confusao[1] + arvore_confusao[4]) / sum(arvore_confusao)
-taxaacerto_arvore
-
-###### Naive Bayes ########################################
+# Controle do modelo 
+                           # Repeated K-Fold Cross Validation
+fitControl <- trainControl(method = "repeatedcv",
+                           # número de grupos criados na reamostragem K-Fold Cross Validation
+                           number = 5,
+                           # número de repetições do K-Fold Cross Validation;
+                           repeats = 5,
+                           classProbs = TRUE)
 
 # Criando modelo
 
-dim(dataset_treino)
-dim(dataset_teste)
+# Tempo inicial
+tempo_ini <- Sys.time()
+modelo_naiveBayes <- train(EVOLUCAO ~ ., 
+                           data = training, 
+                           method = "naive_bayes",
+                           metric = "Accuracy",
+                           trControl = fitControl)
 
-modelo_naiveBayes <- naiveBayes(EVOLUCAO ~ NU_IDADE_N + DESC_RESP + SATURACAO + 
-                                  HOSPITAL + VACINA_COV + TOSSE + 
-                                  DISPNEIA + CARDIOPATI + CS_SEXO + FEBRE, dataset_treino )
-modelo_naiveBayes
+# Tempo final
+tempo_fim <- Sys.time()
+# Tempo total
+tempo_fim - tempo_ini
+
+summary(modelo_naiveBayes)
 
 # Previsão
-
-predicao_naiveBayes <- predict(modelo_naiveBayes, dataset_teste)
+str(data_balance)
+predicao_naiveBayes <- predict(modelo_naiveBayes, newdata =  testing, type = 'raw')
 predicao_naiveBayes
 
+# Matriz de confusão
 
-# Matriz de Confusão
+confusionMatrix(data = predicao_naiveBayes, testing$EVOLUCAO)
 
-confusao_naiveBayes <- table(dataset_teste$EVOLUCAO, predicao_naiveBayes)
-confusao_naiveBayes
-taxaacerto_naiveBayes <- (confusao_naiveBayes[1] + 
-                            confusao_naiveBayes[5] + 
-                            confusao_naiveBayes[9]) / 
-                            sum(confusao_naiveBayes)
+# Visualização Gráfica 
 
-taxaacerto_naiveBayes
+tabela <- data.frame(confusionMatrix(data = predicao_naiveBayes, testing$EVOLUCAO)$table)
+tabela
 
-###### SVM #########################################
-                      
-# Seleção de Atributos
+str(tabela)
 
-# Modelo com todos so atributos 
+tabela <- rename(tabela,
+                 Predições = Prediction, 
+                 "Valores_Reais" = Reference, 
+                 Frequência = Freq)
 
-modelo_svm <- svm(EVOLUCAO ~ ., dataset_treino)
+plotTabela <- tabela %>%
+  mutate(acerto_erro = ifelse(tabela$Predições == tabela$Valores_Reais, "Acerto", "Erro")) %>%
+  group_by(Valores_Reais) %>%
+  mutate(prop = Frequência/sum(Frequência))
 
-# Previsão
+ggplot(data = plotTabela, mapping = aes(x = Valores_Reais, y = Predições, fill = acerto_erro, alpha = Frequência)) +
+  geom_tile() +
+  geom_text(aes(label = Frequência), vjust = .5, fontface  = "bold", alpha = 1) +
+  scale_fill_manual(values = c(Acerto = "green", Erro = "red")) +
+  theme_bw() +
+  xlim(rev(levels(tabela$Valores_Reais)))
 
-predicao_svm <- predict(modelo_svm, dataset_teste)
+view(data_balance)
+# ROC 
+library(pROC)
 
-# Matriz de Confusão
+result <- pROC::multiclass.roc(as.numeric(predicao_naiveBayes),
+                               as.numeric(testing$EVOLUCAO),
+                               percent = TRUE,
+                               levels = c(1,2,3),
+                               direction = "<")
 
-confusao_svm <- table(dataset_teste$EVOLUCAO, predicao_svm)
+plot.roc(result$rocs[[1]], 
+         print.auc=T,
+         legacy.axes = T)
+plot.roc(result$rocs[[2]],
+         add=T, col = 'red',
+         print.auc = T,
+         legacy.axes = T,
+         print.auc.adj = c(0,3))
+plot.roc(result$rocs[[3]],add=T, col = 'blue',
+         print.auc=T,
+         legacy.axes = T,
+         print.auc.adj = c(0,5))
 
-# Taxa de Acerto
-
-taxaacerto_svm <- (confusao_svm[1] +
-                     confusao_svm[5] +
-                     confusao_svm[9]) /
-                      sum(confusao_svm)
-taxaacerto_svm
-
-# Aplicando método de selação de atributos
-importancia <- randomForest(EVOLUCAO ~ ., data = dataset_treino)
-col = importance(importancia)
-col
-varImpPlot(importancia)
-
-# Segundo modelo com as variáveis mais importantes
-modelo_svm_2 <- svm(EVOLUCAO ~ NU_IDADE_N + 
-                    DESC_RESP + SATURACAO, dataset_treino)
-
-predicao_svm_2 <- predict(modelo_svm, dataset_teste)
-confusao_svm_2 <- table(dataset_teste$EVOLUCAO, predicao_svm)
+legend('bottomright',
+       legend = c('cura',
+                  'obito',
+                  'obito_outras_causas'),
+       col=c('black','red','blue'),lwd=2)
 
 
-taxaacerto_svm <- (confusao_svm[1] + confusao_svm[5] +
-                     confusao_svm[9]) / sum(confusao_svm)
-
-taxaacerto_svm
-
-# Obs.: svm tem uma grande penalidade de custo computacional
 ###### KNN ##########################################
 
 # 
@@ -965,7 +987,9 @@ taxadeacerto_knn <- (confusao_knn[1] + confusao_knn[5] + confusao_knn[9]) / sum(
 # Random Forest
 
 # Criando modelo
-modelo_floresta <- randomForest(EVOLUCAO ~ ., data = dataset_treino, ntree=100, importance = T )
+modelo_floresta <- randomForest(EVOLUCAO ~  ., data = dataset_treino, 
+                                                      ntree=100, 
+                                                      importance = T ) # mais importantes
 modelo_floresta
 
 plot(modelo_floresta)
@@ -978,14 +1002,14 @@ head(predicao_floresta)
 # Matriz de Confusão
 
 confusao_floresta <- table(dataset_teste$EVOLUCAO, predicao_floresta)
-view(confusao_floresta)
+
 
 ## Avaliação de Performance
 
-# Matriz de confusão
+taxaacerto_floresta <- (confusao_floresta[1] +
+                          confusao_floresta[5] +
+                          confusao_floresta[9]) / sum(confusao_floresta)
 
-confusao_2 <- confusionMatrix(dataset_teste$EVOLUCAO, predicao_floresta)
-
-plot(confusao_2)
+taxaacerto_floresta
 
 
