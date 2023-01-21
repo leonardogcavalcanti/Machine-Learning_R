@@ -31,8 +31,9 @@ library(rpart)
 #install.packages("randomForest")
 library(randomForest)
 
-
+###########################################################
 # Wrangling -----------------------------------------------
+###########################################################
 
 dados <- read.csv("INFLUD_21-18-07-2022.csv", sep = ";", na.strings = "", stringsAsFactors = T)
 summary(dados)
@@ -236,7 +237,9 @@ bp
 # Obs.: Tirar valores a baixo de 0 que são considerados anormalidade e acima de 111 são considerados outliers
 # Obs.2: Passar as idades para categorias de criança, jovem, adulto e idoso.
 
+################################################
 # PRÉ-PROCESSAMENTO DOS DADOS-------------------
+################################################
 
 # CS_SEXO
 unique(dataset$CS_SEXO)
@@ -248,12 +251,6 @@ dataset <- mutate(dataset,
 # Tirando o valor "I" da variável 
 dataset$CS_SEXO <- factor(dataset$CS_SEXO)
 
-# Transformando um texto em valores, onde:
-# Feminino = 0 e Masculino = 1
-dataset <- mutate(dataset,
-                  CS_SEXO = recode(CS_SEXO,
-                                   "F" = 0,
-                                   "M" = 1))
                 
 str(dataset)
 
@@ -282,22 +279,7 @@ dataset$NU_IDADE_N <- cut(dataset$NU_IDADE_N,
                           labels = c("INFANTIL", "JOVEM", "ADULTO", "IDOSO"),
                           include.lowest = TRUE)
 
-# Criando One Hot Encoder 
-dataset <- mutate(dataset, INFANTIL = ifelse(NU_IDADE_N == "INFANTIL",1,0))
-dataset <- mutate(dataset, JOVEM = ifelse(NU_IDADE_N == "JOVEM",1,0))
-dataset <- mutate(dataset, ADULTO = ifelse(NU_IDADE_N == "ADULTO",1,0))
-dataset <- mutate(dataset, IDOSO = ifelse(NU_IDADE_N == "IDOSO", 1,0))
-
 str(dataset)
-
-# Apagando variável anterior
-dataset <- select(dataset, everything(), -NU_IDADE_N)  
-
-# Realocando as variáveis
-dataset <- dataset %>% 
-  relocate(INFANTIL, JOVEM, ADULTO, IDOSO, .after = CS_SEXO)
-
-view(dataset)
 
 # FEBRE
 counts_febre
@@ -711,36 +693,22 @@ counts_hosp_3
 counts_classfinal
 barplot(counts_classfinal)
 str(dataset)
-view(dataset)
 
-# Criando One Hot Encoder 
-dataset <- mutate(dataset, INFLUENZA = ifelse(CLASSI_FIN == 1, 1,0))
-dataset <- mutate(dataset, OUTROS_VIRUS = ifelse(CLASSI_FIN == 2, 1,0))
-dataset <- mutate(dataset, OUTROS_AGENTES = ifelse(CLASSI_FIN == 3 ,1,0))
-dataset <- mutate(dataset, NAO_ESPECIFICADO = ifelse(CLASSI_FIN == 4 , 1,0))
-dataset <- mutate(dataset, COVID_19 = ifelse(CLASSI_FIN == 5 , 1,0))
 
-# Apagando variável anterior
-dataset <- select(dataset, everything(), -CLASSI_FIN)  
-
-# Realocando as variáveis
-dataset <- dataset %>% 
-  relocate(INFLUENZA, OUTROS_VIRUS, OUTROS_AGENTES, NAO_ESPECIFICADO, COVID_19, .before = EVOLUCAO)
 # Renomenado e passando para factor
-#dataset <- dataset %>% 
-           #mutate(CLASSI_FIN = 
-                  #recode(CLASSI_FIN,
-                      # "1" = "SRAG_influenza",
-                      # "2" = "SRAG_outros_virus",
-                      # "3" = "SRAG_outros_agente_etiologico",
-                      # "4" = "SRAG_nao_especificado",
-                      # "5" = "SRAG_covid_19"))
+dataset <- dataset %>% 
+           mutate(CLASSI_FIN = 
+                  recode(CLASSI_FIN,
+                       "1" = "SRAG_influenza",
+                       "2" = "SRAG_outros_virus",
+                       "3" = "SRAG_outros_agente_etiologico",
+                       "4" = "SRAG_nao_especificado",
+                       "5" = "SRAG_covid_19"))
 view(dataset)
 # Passando para Factor
-#dataset$CLASSI_FIN <- as.factor(dataset$CLASSI_FIN)
-#str(dataset)
+dataset$CLASSI_FIN <- as.factor(dataset$CLASSI_FIN)
+str(dataset)
 # fazendo table para novo barplot
-dataset$CLASSI_FIN <- as.numeric(dataset$CLASSI_FIN)
 counts_classfinal_2 <- table(dataset$CLASSI_FIN)
 barplot(counts_classfinal_2)
 counts_classfinal_2
@@ -779,8 +747,10 @@ counts_evolucao_2
 
 view(dataset)
 
-####################################################################
+##############################################
 # Descritiva gráfica -------------------------
+##############################################
+
 # Criando base temporária para manter a base original intacta.
 
 tmp <- dataset
@@ -788,7 +758,6 @@ tmp$EVOLUCAO <- as.integer(dataset$EVOLUCAO=="cura")  # 1 = SIM (cura)
 
 str(dataset)
 
-##########################################
 # Função para fazer a análise descritiva #
 # Vamos avaliar a distribuição de curados da covid-19 por cada variável X
 # Sumarizamos então y por categoria de X e montamos um gráfico de perfis
@@ -845,17 +814,73 @@ descritiva("HOSPITAL")  #INTERNAÇÃO
 descritiva("CLASSI_FIN")
 
 str(dataset)
+##############################################
+###### Categóricos para numéricos ------------
+##############################################
 
-table(dataset$CLASSI_FIN)
-table(dataset$EVOLUCAO)
+#SEXO
 
-# Dados preditivos desbalanceados
-plot(dataset$EVOLUCAO)
+# Transformando um texto em valores, onde:
+# Feminino = 0 e Masculino = 1
+dataset <- mutate(dataset,
+                  CS_SEXO = recode(CS_SEXO,
+                                   "F" = 0,
+                                   "M" = 1))
+str(dataset)
 
-# Balanceando os dados preditivos usando step_upsample 
+#NU_IDADE_N 
+
+# Criando One Hot Encoder 
+dataset <- mutate(dataset, INFANTIL = ifelse(NU_IDADE_N == "INFANTIL",1,0))
+dataset <- mutate(dataset, JOVEM = ifelse(NU_IDADE_N == "JOVEM",1,0))
+dataset <- mutate(dataset, ADULTO = ifelse(NU_IDADE_N == "ADULTO",1,0))
+dataset <- mutate(dataset, IDOSO = ifelse(NU_IDADE_N == "IDOSO", 1,0))
+
+# Apagando variável anterior
+dataset <- select(dataset, everything(), -NU_IDADE_N)  
+
+# Realocando as variáveis
+dataset <- dataset %>% 
+  relocate(INFANTIL, JOVEM, ADULTO, IDOSO, .after = CS_SEXO)
+
+str(dataset)
+
+#CLASSI_FIN
+
+# Criando One Hot Encoder 
+dataset <- mutate(dataset, INFLUENZA = ifelse(CLASSI_FIN == "SRAG_influenza", 1,0))
+dataset <- mutate(dataset, OUTROS_VIRUS = ifelse(CLASSI_FIN == "SRAG_outros_virus", 1,0))
+dataset <- mutate(dataset, OUTROS_AGENTES = ifelse(CLASSI_FIN == "SRAG_outros_agente_etiologico",1,0))
+dataset <- mutate(dataset, NAO_ESPECIFICADO = ifelse(CLASSI_FIN == "SRAG_nao_especificado" , 1,0))
+dataset <- mutate(dataset, COVID_19 = ifelse(CLASSI_FIN == "SRAG_covid_19" , 1,0))
+
+# Apagando variável anterior
+dataset <- select(dataset, everything(), -CLASSI_FIN)  
+
+# Realocando as variáveis
+dataset <- dataset %>% 
+  relocate(INFLUENZA, OUTROS_VIRUS, OUTROS_AGENTES, NAO_ESPECIFICADO, COVID_19, .before = EVOLUCAO)
+
+view(dataset)
+
+###### Salvando o dataset no formato .csv ---------------------
+write.csv(dataset, file = "dataset_tcc.csv", row.names = FALSE)
+
+# chamando dataset salvo
+dataset_2 <- read.csv("dataset_tcc.csv", sep = ",", na.strings = "", stringsAsFactors = T)
+
+view(dataset_2)
+
+#########################################################
+###### Dados preditivos desbalanceados ----------------
+########################################################
+table(dataset_2$EVOLUCAO)
+plot(dataset_2$EVOLUCAO)
+
+# Balanceando os dados preditivos usando step_downsample 
 # Referência: https://themis.tidymodels.org/ 
-# Registros duplicados até ajustarem no tamanho
-data_balance <- recipe(EVOLUCAO ~., data = dataset) %>% 
+# Registros cortados para ajustar com o de tamanho menor
+data_balance <- recipe(EVOLUCAO ~., data = dataset_2) %>% 
   themis::step_downsample(EVOLUCAO) %>% 
   prep() %>% juice()
 
@@ -863,18 +888,21 @@ data_balance <- recipe(EVOLUCAO ~., data = dataset) %>%
 # dados preditivos balanceados 
 plot(data_balance$EVOLUCAO)
 
-# Os dados aumentaram
+# Os dados diminuiram
 dim(data_balance)
 
-################################################################
-# Construindo o modelo ------------------------------------------
-
+#######################################################
+###### Construindo o modelo ---------------------------
+#######################################################
 inTraining <- createDataPartition(data_balance$EVOLUCAO, p = .70, list = FALSE)
 training <- data_balance[ inTraining,]
 testing  <- data_balance[-inTraining,]
 
 view(data_balance)
+
+#####################################################
 ###### Naive Bayes ##################################
+#####################################################
 
 # Controle do modelo 
                            # Repeated K-Fold Cross Validation
@@ -936,7 +964,8 @@ ggplot(data = plotTabela, mapping = aes(x = Valores_Reais, y = Predições, fill
   xlim(rev(levels(tabela$Valores_Reais)))
 
 view(data_balance)
-# ROC 
+
+###### ROC --------------------------------- 
 library(pROC)
 
 result <- pROC::multiclass.roc(as.numeric(predicao_naiveBayes),
