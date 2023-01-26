@@ -4,25 +4,30 @@
 #install.packages("tidyverse")
 library(tidyverse)
 
+#install.packages("tidymodels")
+#pacote completo para modelagem
+library(tidymodels)
+
+#install.packages("multiclassPairs")
+library(multiclassPairs)
+# precedimento de dummies
+library(fastDummies)
+
 # Gráficos
 library(ggplot2)
 
+library(plotly)
+
+
 ###### Algoritmos ###########
 
-#install.packages("themis", dependencies = TRUE)
-library(themis)
 
 # Manipulação de machine learning
-#install.packages("caret")
-library(caret)
+library(themis)
 
 ###### Modelos ###########
 
 
-# Baseado em instância
-
-#install.packages("class")
-library(class)
 
 # Métodos baseado em arvore de decisão
 
@@ -787,7 +792,7 @@ descritiva <- function(var){
     # Rótulo dos eixos
     xlab(var) + ylab("Taxa de cura") + 
     # Marcas do eixo secundário
-    scale_y_continuous(sec.axis = sec_axis(~.*366229, name = "Frequencia"), labels = scales::percent)
+    scale_y_continuous(sec.axis = sec_axis(~.*366229, name = "Frequência"), labels = scales::percent)
 }
 
 descritiva("CS_SEXO")
@@ -871,174 +876,201 @@ dataset_2 <- read.csv("dataset_tcc.csv", sep = ",", na.strings = "", stringsAsFa
 
 view(dataset_2)
 
-#########################################################
-###### Dados preditivos desbalanceados ----------------
-########################################################
+
+
+###### Construindo modelos ---------------------------
+
+
+inTraining <- createDataPartition(dataset_2$EVOLUCAO, p = .70, list = FALSE)
+training <- dataset_2[ inTraining,]
+testing  <- dataset_2[-inTraining,]
+
 table(dataset_2$EVOLUCAO)
 plot(dataset_2$EVOLUCAO)
+
 
 # Balanceando os dados preditivos usando step_downsample 
 # Referência: https://themis.tidymodels.org/ 
 # Registros cortados para ajustar com o de tamanho menor
-data_balance <- recipe(EVOLUCAO ~., data = dataset_2) %>% 
-  themis::step_downsample(EVOLUCAO) %>% 
-  prep() %>% juice()
-
-
-# dados preditivos balanceados 
-plot(data_balance$EVOLUCAO)
+training_balance <- recipe(EVOLUCAO ~., data = training) %>% 
+  themis::step_upsample(EVOLUCAO) %>% 
+  prep() %>% 
+  juice()
 
 # Os dados diminuiram
-dim(data_balance)
+dim(training_balance)
+plot(training_balance$EVOLUCAO)
 
-#######################################################
-###### Construindo o modelo ---------------------------
-#######################################################
-inTraining <- createDataPartition(data_balance$EVOLUCAO, p = .70, list = FALSE)
-training <- data_balance[ inTraining,]
-testing  <- data_balance[-inTraining,]
 
-view(data_balance)
+###### Logistic #####################################
 
-#####################################################
-###### Naive Bayes ##################################
-#####################################################
 
-# Controle do modelo 
-                           # Repeated K-Fold Cross Validation
-fitControl <- trainControl(method = "repeatedcv",
-                           # número de grupos criados na reamostragem K-Fold Cross Validation
-                           number = 5,
-                           # número de repetições do K-Fold Cross Validation;
-                           repeats = 5,
-                           classProbs = TRUE)
 
-# Criando modelo
+#Modelo
+logistic <-
+  multinom_reg() %>%
+  set_mode("classification") %>% 
+  set_engine("nnet")
+??multinom_reg 
 
-# Tempo inicial
-tempo_ini <- Sys.time()
-modelo_naiveBayes <- train(EVOLUCAO ~ ., 
-                           data = training, 
-                           method = "naive_bayes",
-                           metric = "Accuracy",
-                           trControl = fitControl)
+logistic
 
-# Tempo final
-tempo_fim <- Sys.time()
+#Treinamento
+
+mdl_fit_logistic <-
+  logistic %>% 
+  fit(EVOLUCAO ~ ., data = training_balance)
+
+# iniciar o cronômetro
+tempo_inicial <- Sys.time()
+mdl_fit_logistic
 # Tempo total
-tempo_fim - tempo_ini
-
-summary(modelo_naiveBayes)
-
-# Previsão
-str(data_balance)
-predicao_naiveBayes <- predict(modelo_naiveBayes, newdata =  testing, type = 'raw')
-predicao_naiveBayes
-
-# Matriz de confusão
-
-confusionMatrix(data = predicao_naiveBayes, testing$EVOLUCAO)
-
-# Visualização Gráfica 
-
-tabela <- data.frame(confusionMatrix(data = predicao_naiveBayes, testing$EVOLUCAO)$table)
-tabela
-
-str(tabela)
-
-tabela <- rename(tabela,
-                 Predições = Prediction, 
-                 "Valores_Reais" = Reference, 
-                 Frequência = Freq)
-
-plotTabela <- tabela %>%
-  mutate(acerto_erro = ifelse(tabela$Predições == tabela$Valores_Reais, "Acerto", "Erro")) %>%
-  group_by(Valores_Reais) %>%
-  mutate(prop = Frequência/sum(Frequência))
-
-ggplot(data = plotTabela, mapping = aes(x = Valores_Reais, y = Predições, fill = acerto_erro, alpha = Frequência)) +
-  geom_tile() +
-  geom_text(aes(label = Frequência), vjust = .5, fontface  = "bold", alpha = 1) +
-  scale_fill_manual(values = c(Acerto = "green", Erro = "red")) +
-  theme_bw() +
-  xlim(rev(levels(tabela$Valores_Reais)))
-
-view(data_balance)
-
-###### ROC --------------------------------- 
-library(pROC)
-
-result <- pROC::multiclass.roc(as.numeric(predicao_naiveBayes),
-                               as.numeric(testing$EVOLUCAO),
-                               percent = TRUE,
-                               levels = c(1,2,3),
-                               direction = "<")
-
-plot.roc(result$rocs[[1]], 
-         print.auc=T,
-         legacy.axes = T)
-plot.roc(result$rocs[[2]],
-         add=T, col = 'red',
-         print.auc = T,
-         legacy.axes = T,
-         print.auc.adj = c(0,3))
-plot.roc(result$rocs[[3]],add=T, col = 'blue',
-         print.auc=T,
-         legacy.axes = T,
-         print.auc.adj = c(0,5))
-
-legend('bottomright',
-       legend = c('cura',
-                  'obito',
-                  'obito_outras_causas'),
-       col=c('black','red','blue'),lwd=2)
+Sys.time() - tempo_inicial
 
 
-###### KNN ##########################################
+# Validação ----------------------------
 
-# 
+# Reamostragem 
+resample_logistic <- bootstraps(training_balance, strata = EVOLUCAO)
+resample_logistic
 
-predicao_knn <- knn(dataset_treino[,1:23], dataset_teste[,1:23], dataset_treino[,23], k=3) # número de k vizinhos mais próximos
+# Treinando com reamostragem incluindo métricas
 
-# Matriz de confusão
+# iniciar o cronômetro
+tempo_inicial <- Sys.time()
+mdl_fit_resample_logistic <-
+  logistic %>%
+  fit_resamples(EVOLUCAO ~.,
+                resample_logistic,
+                metrics = metric_set(roc_auc, accuracy, sens, precision, recal),
+                control = control_resamples(save_pred = TRUE))
+# Tempo total
+Sys.time() - tempo_inicial
 
-confusao_knn <- table(dataset_treino[,5], predicao_knn)
-confusao_knn
+mdl_fit_resample_logistic
 
-# Taxa de acerto
+# Analisando os resultados da reamostragem
+                
+metricas_resample <- mdl_fit_resample_logistic %>% 
+  collect_metrics()
 
-taxadeacerto_knn <- (confusao_knn[1] + confusao_knn[5] + confusao_knn[9]) / sum(confusao_knn)
+metricas_resample
 
+matriz_confusao_resample <- mdl_fit_resample_logistic %>% 
+  # chamando unnest para desaninhar a pasta .predictions
+  unnest(.predictions) %>% 
+  conf_mat(EVOLUCAO, .pred_class) %>% 
+  autoplot(mdl_fit_logistic, type = "heatmap")
 
-
-##### Ensamble Learning ###########################################
-
-# Random Forest
-
-# Criando modelo
-modelo_floresta <- randomForest(EVOLUCAO ~  ., data = dataset_treino, 
-                                                      ntree=100, 
-                                                      importance = T ) # mais importantes
-modelo_floresta
-
-plot(modelo_floresta)
-
-# Previsão
-
-predicao_floresta <- predict(modelo_floresta, newdata = dataset_teste) # probabilidades 
-head(predicao_floresta)
-
-# Matriz de Confusão
-
-confusao_floresta <- table(dataset_teste$EVOLUCAO, predicao_floresta)
+matriz_confusao_resample
 
 
-## Avaliação de Performance
+# Prevendo com o teste --------------------------------------- 
 
-taxaacerto_floresta <- (confusao_floresta[1] +
-                          confusao_floresta[5] +
-                          confusao_floresta[9]) / sum(confusao_floresta)
+# bootstraps tem reposição
+resample_logistic_teste <- bootstraps(testing, strata = EVOLUCAO)
+resample_logistic_teste
 
-taxaacerto_floresta
+# Validação do teste
+
+# iniciar o cronômetro
+tempo_inicial <- Sys.time()
+mdl_fit_resample_logistic_teste <-
+  logistic %>%
+  fit_resamples(EVOLUCAO ~.,
+                resample_logistic_teste,
+                metrics = metric_set(roc_auc, accuracy, sens, precision, recall),
+                control = control_resamples(save_pred = TRUE))
+# Tempo total
+Sys.time() - tempo_inicial
+
+#Modelo do treino com a amostra de teste
+predicao_logistic <- predict(mdl_fit_logistic,new_data = testing)
+predicao_logistic
+
+predicao_teste_res <- bind_cols(predicao_logistic, testing %>% select(EVOLUCAO))
+predicao_teste_res <- bind_cols(predicao_teste_res, testing %>% select(-EVOLUCAO))
+resample_logistic_teste_2 <- bootstraps(predicao_teste_res, strata = EVOLUCAO)
+resample_logistic_teste_2
+predicao_teste_res <- bind_cols(predicao_teste_res, resample_logistic_teste %>% select(id))
+accuracy(testing, predicao_teste_res$EVOLUCAO, predicao_teste_res$.pred_class)
+######################### Matriz de confusão ######################
+# Análise de resultado reamostragem de teste
+mdl_fit_logistic
+metrica_teste <- mdl_fit_logistic %>% 
+  conf_mat(EVOLUCAO, )
+  
+metricas_teste <- mdl_fit_resample_logistic_teste %>% 
+  collect_metrics()
+metricas_teste
+
+matriz_confusao_teste <- mdl_fit_resample_logistic_teste %>% 
+  unnest(.predictions) %>%
+  conf_mat(EVOLUCAO, .pred_class) %>% 
+  #com os modelos treinados dentro da reamostragem
+  autoplot(mdl_fit_resample_logistic_teste, type = "heatmap")
+matriz_confusao_teste
+
+########################## ROC #########################
+
+X <- subset(testing, select = -c(EVOLUCAO))
+
+logistic_teste <-
+  multinom_reg() %>%
+  set_mode("classification") %>% 
+  set_engine("nnet") %>%
+  fit(EVOLUCAO ~ ., data = testing)
+
+
+y_scores <- logistic_teste %>%
+  predict(X, type = 'prob')
+
+
+y_onehot <- dummy_cols(testing$EVOLUCAO)
+colnames(y_onehot) <- c('drop','cura', 'obito', 'obito_outras_causas')
+y_onehot <- subset(y_onehot, select = -c(drop))
+
+str(y_onehot)
+z = cbind(y_scores, y_onehot)
+str(z)
+
+z$cura <- as.factor(z$cura)
+roc_cura <- roc_curve(data = z, cura, .pred_cura)
+roc_cura$specificity <- 1 - roc_cura$specificity
+colnames(roc_cura) <- c('threshold', 'tpr', 'fpr')
+auc_cura <- roc_auc(data = z, cura, .pred_cura)
+auc_cura <- auc_cura$.estimate
+cura <- paste('cura (AUC=',toString(round(1-auc_cura,2)),')',sep = '')
+
+
+z$obito <- as.factor(z$obito)
+roc_obito <- roc_curve(data = z, obito, .pred_obito)
+roc_obito$specificity <- 1 - roc_obito$specificity
+colnames(roc_obito) <- c('threshold', 'tpr', 'fpr')
+auc_obito <- roc_auc(data = z, obito, .pred_obito)
+auc_obito <- auc_obito$.estimate
+obito <- paste('obito (AUC=',toString(round(1-auc_obito,2)),')', sep = '')
+
+z$obito_outras_causas <- as.factor(z$obito_outras_causas)
+roc_obito_outras_causas <- roc_curve(data = z, obito_outras_causas, .pred_obito_outras_causas)
+roc_obito_outras_causas$specificity <- 1 - roc_obito_outras_causas$specificity
+colnames(roc_obito_outras_causas) <- c('threshold', 'tpr', 'fpr')
+auc_obito_outras_causas <- roc_auc(data = z, obito_outras_causas, .pred_obito_outras_causas)
+auc_obito_outras_causas <- auc_obito_outras_causas$.estimate
+obito_outras_causas <- paste('obito_outras_causas (AUC=',toString(round(1-auc_obito_outras_causas,2)),')',sep = '')
+
+# Create an empty figure, and iteratively add a line for each class
+fig <- plot_ly()%>%
+  add_segments(x = 0, xend = 1, y = 0, yend = 1, line = list(dash = "dash", color = 'black'), showlegend = FALSE) %>%
+  add_trace(data = roc_cura,x = ~fpr, y = ~tpr, mode = 'lines', name = cura, type = 'scatter')%>%
+  add_trace(data = roc_obito,x = ~fpr, y = ~tpr, mode = 'lines', name = obito, type = 'scatter')%>%
+  add_trace(data = roc_obito_outras_causas,x = ~fpr, y = ~tpr, mode = 'lines', name = obito_outras_causas, type = 'scatter')%>%
+  layout(xaxis = list(
+    title = "False Positive Rate"
+  ), yaxis = list(
+    title = "True Positive Rate"
+  ),legend = list(x = 100, y = 0.5))
+fig
+
 
 
